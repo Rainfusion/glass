@@ -12,7 +12,7 @@ where
 }
 
 /// Convert objects that implement Serialize to a String
-pub fn objects_to_string<T>(objects: Vec<(Uuid, T)>) -> Result<String, Box<Error>>
+pub fn objects_to_string<T>(objects: &[(Uuid, T)]) -> Result<String, Box<Error>>
 where
     T: serde::ser::Serialize,
 {

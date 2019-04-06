@@ -10,6 +10,18 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+#[allow(dead_code)]
+static LAYOUT: [&'static str; 8] = [
+    "name",
+    "author",
+    "img_url",
+    "summary",
+    "description",
+    "version",
+    "item_type",
+    "dependencies",
+];
+
 /// The RoR1 Mod Object
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct Mod {
@@ -50,25 +62,24 @@ impl Default for ModType {
     }
 }
 
-/// ModType implementation, contains general functions for matching values.
-impl ModType {
-    /// Safely match ModType types into a usable string literal.
-    /// Returns the name as a string literal if item exists in the object.
-    /// Returns "mod" if item does not contain a ModType in the object.
-    pub fn type_to_string(&self) -> &str {
-        match self {
-            ModType::Mod => "mod",
-            ModType::Library => "lib",
+/// Match a ModType into a string literal.
+impl From<ModType> for String {
+    fn from(item: ModType) -> Self {
+        match item {
+            ModType::Mod => "mod".to_owned(),
+            ModType::Library => "lib".to_owned(),
         }
     }
 }
 
-/// Safely match a usable string literal into ModType.
-pub fn string_to_type(object: &str) -> ModType {
-    match object {
-        "mod" => ModType::Mod,
-        "lib" => ModType::Library,
-        _ => ModType::Mod,
+/// Match a usable string literal into ModType.
+impl From<String> for ModType {
+    fn from(string: String) -> Self {
+        match string.as_str() {
+            "mod" => ModType::Mod,
+            "lib" => ModType::Library,
+            _ => ModType::Mod,
+        }
     }
 }
 
@@ -111,20 +122,6 @@ impl std::fmt::Display for Mod {
 
 /// Mod implementation, contains general functions for matching values.
 impl Mod {
-    /// Creates an empty Mod object.
-    pub fn new() -> Self {
-        Self {
-            name: None,
-            author: None,
-            img_url: None,
-            summary: None,
-            description: None,
-            version: None,
-            item_type: ModType::Mod,
-            dependencies: None,
-        }
-    }
-
     /// Converts a field map into an item object.
     #[cfg(feature = "redis_backend")]
     #[cfg(feature = "json_backend")]
@@ -132,32 +129,14 @@ impl Mod {
         let values: Vec<String> = field_map.iter().map(|x| x.clone().1).collect();
 
         Self {
-            name: match values.get(0) {
-                None => None,
-                Some(x) => Some(x.to_owned()),
-            },
-            author: match values.get(1) {
-                None => None,
-                Some(x) => Some(x.to_owned()),
-            },
-            img_url: match values.get(2) {
-                None => None,
-                Some(x) => Some(x.to_owned()),
-            },
-            summary: match values.get(3) {
-                None => None,
-                Some(x) => Some(x.to_owned()),
-            },
-            description: match values.get(4) {
-                None => None,
-                Some(x) => Some(x.to_owned()),
-            },
-            version: match values.get(5) {
-                None => None,
-                Some(x) => Some(x.to_owned()),
-            },
-            item_type: string_to_type(&values.get(6).unwrap()),
-            dependencies: match json::string_to_objects(&values.get(7).unwrap()) {
+            name: values.get(0).and_then(|x| Some(x.to_owned())),
+            author: values.get(1).and_then(|x| Some(x.to_owned())),
+            img_url: values.get(2).and_then(|x| Some(x.to_owned())),
+            summary: values.get(3).and_then(|x| Some(x.to_owned())),
+            description: values.get(4).and_then(|x| Some(x.to_owned())),
+            version: values.get(5).and_then(|x| Some(x.to_owned())),
+            item_type: ModType::from(values[6].clone()),
+            dependencies: match json::string_to_objects(&values[7]) {
                 Ok(x) => Some(x),
                 Err(_) => None,
             },
@@ -179,10 +158,7 @@ impl Mod {
             self.match_description().to_owned(),
         ));
         output.push(("version".to_owned(), self.match_version().to_owned()));
-        output.push((
-            "item_type".to_owned(),
-            self.item_type.type_to_string().to_owned(),
-        ));
+        output.push(("item_type".to_owned(), String::from(self.item_type.clone())));
         output.push((
             "dependencies".to_owned(),
             serde_json::to_string(&self.dependencies).unwrap(),
@@ -305,7 +281,7 @@ mod json_tests {
         for _ in 0..2 {
             data_vec.push((uuid, Mod::default()));
         }
-        let serialized = json::objects_to_string(data_vec).unwrap();
+        let serialized = json::objects_to_string(&data_vec).unwrap();
         assert_eq!(
             r#"[["426497c2-1f94-4a75-889f-ecc04629da1d",{"name":null,"author":null,"img_url":null,"summary":null,"description":null,"version":null,"item_type":"Mod","dependencies":null}],["426497c2-1f94-4a75-889f-ecc04629da1d",{"name":null,"author":null,"img_url":null,"summary":null,"description":null,"version":null,"item_type":"Mod","dependencies":null}]]"#,
             serialized
@@ -338,7 +314,7 @@ mod json_tests {
                 },
             ))
         }
-        let serialized = json::objects_to_string(data_vec).unwrap();
+        let serialized = json::objects_to_string(&data_vec).unwrap();
         assert_eq!(r#"[["426497c2-1f94-4a75-889f-ecc04629da1d",{"name":"Example Mod","author":"Example Author","img_url":"localhost","summary":"Example Summary","description":"Example Description","version":"0.0.1","item_type":"Mod","dependencies":[["2b770fa6-749f-4aee-b49d-7bc4a0fe5dbe",{"name":"Example Dependency","summary":"Example Summary","version":"0.0.1"}]]}],["426497c2-1f94-4a75-889f-ecc04629da1d",{"name":"Example Mod","author":"Example Author","img_url":"localhost","summary":"Example Summary","description":"Example Description","version":"0.0.1","item_type":"Mod","dependencies":[["2b770fa6-749f-4aee-b49d-7bc4a0fe5dbe",{"name":"Example Dependency","summary":"Example Summary","version":"0.0.1"}]]}]]"#, serialized);
     }
 
@@ -456,7 +432,7 @@ mod msgpack_tests {
     fn test_msgpack_empty() {
         let data = Mod::default();
         let uuid: Uuid = Uuid::from_str("426497c2-1f94-4a75-889f-ecc04629da1d").unwrap();
-        let serialized = msgpack::object_to_bytes(&(uuid, data)).unwrap();
+        let serialized = msgpack::object_to_bytes((uuid, data)).unwrap();
         let deserialized: (Uuid, Mod) = msgpack::bytes_to_object(&serialized).unwrap();
         assert_eq!((uuid, Mod::default()), deserialized);
     }
@@ -481,7 +457,7 @@ mod msgpack_tests {
             )]),
         };
         let uuid: Uuid = Uuid::from_str("426497c2-1f94-4a75-889f-ecc04629da1d").unwrap();
-        let serialized = msgpack::object_to_bytes(&(uuid, data)).unwrap();
+        let serialized = msgpack::object_to_bytes((uuid, data)).unwrap();
         let deserialized: (Uuid, Mod) = msgpack::bytes_to_object(&serialized).unwrap();
         assert_eq!(
             (
@@ -546,6 +522,7 @@ mod msgpack_tests {
                 },
             ))
         }
+
         let serialized = msgpack::objects_to_bytes(&data_vec).unwrap();
         let deserialized: Vec<(Uuid, Mod)> = msgpack::bytes_to_objects(&serialized).unwrap();
         assert_eq!(data_vec, deserialized);
@@ -556,7 +533,7 @@ mod msgpack_tests {
 #[cfg(test)]
 #[cfg(feature = "redis_backend")]
 mod redis_tests {
-    use super::{json, redis, string_to_type, Mod, ModDependency, ModType};
+    use super::{json, redis, Mod, ModDependency, ModType, LAYOUT};
     use std::str::FromStr;
     use uuid::Uuid;
 
@@ -603,19 +580,9 @@ mod redis_tests {
         assert_eq!(result, uuid);
 
         // Check if Object can be retrieved successfully.
-        let field_map: Vec<String> = vec![
-            "name".to_string(),
-            "author".to_string(),
-            "img_url".to_string(),
-            "summary".to_string(),
-            "description".to_string(),
-            "version".to_string(),
-            "item_type".to_string(),
-            "dependencies".to_string(),
-        ];
 
         let second_result: Vec<(String, String)> =
-            redis::retrieve_object_from_database(&connection, "mods", &field_map, uuid).unwrap();
+            redis::retrieve_object_from_database(&connection, "mods", LAYOUT.to_vec(), uuid).unwrap();
 
         let mut values = Vec::new();
         for i in second_result {
@@ -629,12 +596,12 @@ mod redis_tests {
             summary: Some(values[3].to_owned()),
             description: Some(values[4].to_owned()),
             version: Some(values[5].to_owned()),
-            item_type: string_to_type(&values[6].to_owned()),
+            item_type: ModType::from(values[6].to_owned()),
             dependencies: Some(json::string_to_objects(&values[7].to_owned()).unwrap()),
         };
         assert_eq!(object, data);
 
         // Delete Object from database.
-        redis::remove_object_from_database(&connection, "mods", &field_map, uuid).unwrap();
+        redis::remove_object_from_database(&connection, "mods", LAYOUT.to_vec(), uuid).unwrap();
     }
 }

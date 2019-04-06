@@ -4,14 +4,17 @@
 use std::{error::Error, path::PathBuf, str::FromStr};
 
 use log::debug;
-use redis::{Commands, Connection, ConnectionAddr, ConnectionInfo};
+use redis::{Client, Commands, Connection, ConnectionAddr, ConnectionInfo};
 use serde::Deserialize;
 use std::fmt::Debug;
 use uuid::Uuid;
 
+/// Custom Type Definitions
+type FieldMap<T> = Vec<(String, T)>;
+
 /// Redis Connection Config
 /// Supports both TCP and Socket connections.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct RedisConfig {
     // TCP
     pub database_ip: Option<String>,
@@ -25,15 +28,14 @@ pub struct RedisConfig {
     pub database_password: Option<String>,
 }
 
-/// Simple function to parse a RedisConfig from a JSON file in a folder.
+/// Function to parse a RedisConfig from a JSON file in a folder.
 pub fn parse_redis_config<T: AsRef<std::path::Path>>(path: T) -> Result<RedisConfig, Box<Error>> {
     let file = std::fs::File::open(path)?;
     Ok(serde_json::from_reader(file)?)
 }
 
-impl RedisConfig {
-    pub fn new() -> Self {
-        // Generates a TCP configuration as default.
+impl Default for RedisConfig {
+    fn default() -> Self {
         RedisConfig {
             database_ip: Some(String::from("localhost")),
             database_port: Some(6379),
@@ -42,49 +44,39 @@ impl RedisConfig {
             database_password: None,
         }
     }
+}
 
+impl RedisConfig {
     /// Creates a connection to the Redis database using the RedisConfig
-    pub fn form_connection(&self) -> Result<Connection, Box<Error>> {
+    pub fn form_connection(self) -> Result<Connection, Box<Error>> {
         if self.database_socket.is_none() {
             // Handle TCP Connection
-            let connection_info = ConnectionInfo {
+
+            Ok(Client::open(ConnectionInfo {
                 addr: Box::new(ConnectionAddr::Tcp(
-                    match self.database_ip.clone() {
-                        None => "localhost".to_owned(),
-                        Some(x) => x,
-                    },
-                    match self.database_port {
-                        None => 6379,
-                        Some(x) => x,
-                    },
+                    self.database_ip
+                        .clone()
+                        .map_or("localhost".to_owned(), |x| x),
+                    self.database_port.map_or(6379, |x| x),
                 )),
                 db: self.database_id,
-                passwd: match self.database_password {
-                    Some(ref s) => Some(s.to_string()),
-                    None => None,
-                },
-            };
-
-            let connection = redis::Client::open(connection_info)?;
-            Ok(connection.get_connection()?)
+                passwd: self.database_password.clone().and_then(|x| Some(x)),
+            })?
+            .get_connection()?)
         } else {
             // Handle Socket Connection
-            let connection_info = ConnectionInfo {
+
+            Ok(Client::open(ConnectionInfo {
                 addr: Box::new(ConnectionAddr::Unix(PathBuf::from_str(
-                    match &self.database_socket {
-                        None => "/tmp/redis.sock",
-                        Some(x) => x.as_str(),
-                    },
+                    self.database_socket
+                        .clone()
+                        .map_or("/tmp/redis.sock".to_owned(), |x| x)
+                        .as_str(),
                 )?)),
                 db: self.database_id,
-                passwd: match self.database_password {
-                    Some(ref s) => Some(s.to_string()),
-                    None => None,
-                },
-            };
-
-            let connection = redis::Client::open(connection_info)?;
-            Ok(connection.get_connection()?)
+                passwd: self.database_password.clone().and_then(|x| Some(x)),
+            })?
+            .get_connection()?)
         }
     }
 }
@@ -94,7 +86,7 @@ impl RedisConfig {
 pub fn insert_object_into_database<T>(
     connection: &Connection,
     index: &str,
-    field_map: Vec<(String, T)>,
+    field_map: FieldMap<T>,
     uuid: Option<Uuid>,
 ) -> Result<Uuid, Box<Error>>
 where
@@ -139,7 +131,7 @@ where
 pub fn remove_object_from_database(
     connection: &Connection,
     index: &str,
-    field_map: &Vec<String>,
+    field_map: Vec<&str>,
     uuid: Uuid,
 ) -> Result<(), Box<Error>> {
     // Remove uuid in table.
@@ -171,7 +163,7 @@ pub fn remove_object_from_database(
 pub fn edit_object_from_database<T>(
     connection: &Connection,
     index: &str,
-    field_map: Vec<(String, T)>,
+    field_map: FieldMap<T>,
     uuid: Uuid,
 ) -> Result<(), Box<Error>>
 where
@@ -182,7 +174,7 @@ where
 
     // Iterate through map to find fields that need to be edited and generate a command for them.
     for item in field_map {
-        println!(
+        debug!(
             "EDIT: Got: {} - Value: {:?} -> for {}. Generating command.",
             item.0, item.1, index
         );
@@ -204,9 +196,9 @@ where
 pub fn retrieve_object_from_database<T>(
     connection: &Connection,
     index: &str,
-    field_map: &Vec<String>,
+    field_map: Vec<&str>,
     uuid: Uuid,
-) -> Result<Vec<(String, T)>, Box<Error>>
+) -> Result<FieldMap<T>, Box<Error>>
 where
     T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
 {
@@ -219,7 +211,7 @@ where
         pipeline.add_command(
             redis::cmd("HGET")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(item),
+                .arg(*item),
         );
     }
 
@@ -227,16 +219,12 @@ where
     let output: Vec<T> = pipeline.query(connection)?;
 
     // Merge the two vectors.
-    let mut merged: Vec<(String, T)> = Vec::new();
+    let mut merged: FieldMap<T> = Vec::new();
 
     // Merge Field with Value
     for i in 0..field_map.len() {
         debug!("GET COMBINE: Index: {}", i);
-        let map_value = match field_map.get(i) {
-            None => "".to_string(),
-            Some(x) => x.clone(),
-        };
-
+        let map_value = field_map.get(i).map_or("", |x| x);
         let value = output.get(i);
 
         debug!(
@@ -254,14 +242,14 @@ where
 /// Returns the objects from the database with the key and object in a Vec.
 pub fn request_group_of_objects<T>(
     connection: &Connection,
-    field_map: &Vec<String>,
+    field_map: Vec<&str>,
     index: &str,
     amount: isize,
-) -> Result<Vec<(Uuid, Vec<(String, T)>)>, Box<Error>>
+) -> Result<Vec<(Uuid, FieldMap<T>)>, Box<Error>>
 where
     T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
 {
-    let mut vector: Vec<(Uuid, Vec<(String, T)>)> = Vec::new();
+    let mut vector: Vec<(Uuid, FieldMap<T>)> = Vec::new();
 
     let output: Vec<String> = connection.zrange(
         &format!("{}-index", index),
@@ -272,7 +260,7 @@ where
     for value in output {
         let uuid = Uuid::parse_str(&value)?;
 
-        let object = retrieve_object_from_database(connection, index, field_map, uuid)?;
+        let object = retrieve_object_from_database(connection, index, field_map.clone(), uuid)?;
         vector.push((uuid, object));
 
         if uuid == grab_last_object(connection, index)? {
