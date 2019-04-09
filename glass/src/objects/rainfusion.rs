@@ -8,22 +8,11 @@ use crate::backends::redis;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use glass_derive::*;
 use uuid::Uuid;
 
-#[allow(dead_code)]
-static LAYOUT: [&'static str; 8] = [
-    "name",
-    "author",
-    "img_url",
-    "summary",
-    "description",
-    "version",
-    "item_type",
-    "dependencies",
-];
-
 /// The RoR1 Mod Object
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Indexable)]
 pub struct Mod {
     pub name: Option<String>,
     pub author: Option<String>,
@@ -533,7 +522,7 @@ mod msgpack_tests {
 #[cfg(test)]
 #[cfg(feature = "redis_backend")]
 mod redis_tests {
-    use super::{json, redis, Mod, ModDependency, ModType, LAYOUT};
+    use super::{json, redis, Mod, ModDependency, ModType};
     use std::str::FromStr;
     use uuid::Uuid;
 
@@ -582,7 +571,8 @@ mod redis_tests {
         // Check if Object can be retrieved successfully.
 
         let second_result: Vec<(String, String)> =
-            redis::retrieve_object_from_database(&connection, "mods", LAYOUT.to_vec(), uuid).unwrap();
+            redis::retrieve_object_from_database(&connection, "mods", Mod::fields(), uuid)
+                .unwrap();
 
         let mut values = Vec::new();
         for i in second_result {
@@ -602,6 +592,6 @@ mod redis_tests {
         assert_eq!(object, data);
 
         // Delete Object from database.
-        redis::remove_object_from_database(&connection, "mods", LAYOUT.to_vec(), uuid).unwrap();
+        redis::remove_object_from_database(&connection, "mods", Mod::fields(), uuid).unwrap();
     }
 }

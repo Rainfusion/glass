@@ -131,7 +131,7 @@ where
 pub fn remove_object_from_database(
     connection: &Connection,
     index: &str,
-    field_map: Vec<&str>,
+    field_map: &[&'static str],
     uuid: Uuid,
 ) -> Result<(), Box<Error>> {
     // Remove uuid in table.
@@ -149,7 +149,7 @@ pub fn remove_object_from_database(
         pipeline.add_command(
             redis::cmd("HDEL")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(item),
+                .arg(*item),
         );
     }
 
@@ -196,7 +196,7 @@ where
 pub fn retrieve_object_from_database<T>(
     connection: &Connection,
     index: &str,
-    field_map: Vec<&str>,
+    field_map: &[&'static str],
     uuid: Uuid,
 ) -> Result<FieldMap<T>, Box<Error>>
 where
@@ -242,7 +242,7 @@ where
 /// Returns the objects from the database with the key and object in a Vec.
 pub fn request_group_of_objects<T>(
     connection: &Connection,
-    field_map: Vec<&str>,
+    field_map: &[&'static str],
     index: &str,
     amount: isize,
 ) -> Result<Vec<(Uuid, FieldMap<T>)>, Box<Error>>

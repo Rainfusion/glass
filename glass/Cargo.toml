@@ -1,0 +1,27 @@
+[package]
+name = "glass"
+version = "0.2.0"
+authors = ["FrictionlessPortals <8077147+FrictionlessPortals@users.noreply.github.com>"]
+edition = "2018"
+
+[features]
+# Default set of features, includes full library.
+default = ["redis", "uuid", "serde_json", "rmp-serde"]
+# Redis Feature
+redis_backend = ["redis", "uuid"]
+# JSON Feature
+json_backend = ["serde_json", "uuid"]
+# MsgPack Feature
+msgpack_backend = ["rmp-serde", "uuid"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+
+uuid = { version = "0.7", features = ["serde", "v4"], optional = true }
+serde_json = { version = "1.0", optional = true }
+rmp-serde = {version = "0.13", optional = true }
+redis = { version = "0.10", optional = true }
+
+[dependencies.glass-derive]
+path = "../glass-derive"
