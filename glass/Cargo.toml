@@ -1,6 +1,6 @@
 [package]
 name = "glass"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["FrictionlessPortals <8077147+FrictionlessPortals@users.noreply.github.com>"]
 edition = "2018"
 
