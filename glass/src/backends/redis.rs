@@ -260,7 +260,7 @@ where
     for value in output {
         let uuid = Uuid::parse_str(&value)?;
 
-        let object = retrieve_object_from_database(connection, index, field_map.clone(), uuid)?;
+        let object = retrieve_object_from_database(connection, index, field_map, uuid)?;
         vector.push((uuid, object));
 
         if uuid == grab_last_object(connection, index)? {
