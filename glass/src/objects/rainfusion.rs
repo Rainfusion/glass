@@ -12,7 +12,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 /// The RoR1 Mod Object
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Indexable)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Indexable, Clone)]
 pub struct Mod {
     pub name: Option<String>,
     pub author: Option<String>,
