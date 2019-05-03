@@ -27,12 +27,9 @@ pub struct Mod {
     pub tags: Option<Vec<String>>,
 }
 
-/// ModDependency enum, all values in this enum are mod types.
-/// All types match into string literals.
+/// Mod Dependency Struct
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub struct ModDependency {
-    pub name: String,
-    pub summary: String,
     pub version: String,
 }
 
@@ -108,7 +105,10 @@ impl From<Mod> for Vec<(String, String)> {
             |x: Option<String>| -> String { x.map_or("N/A".to_string(), |y| y.to_string()) };
 
         output.push(("name".to_owned(), collapse_string(object.name.to_owned())));
-        output.push(("author".to_owned(), collapse_string(object.author.to_owned())));
+        output.push((
+            "author".to_owned(),
+            collapse_string(object.author.to_owned()),
+        ));
         output.push((
             "summary".to_owned(),
             collapse_string(object.summary.to_owned()),
@@ -125,8 +125,8 @@ impl From<Mod> for Vec<(String, String)> {
         output.push((
             "dependencies".to_owned(),
             json::objects_to_string(match object.dependencies {
-                Some(ref x) => x,
                 None => &[],
+                Some(ref x) => x,
             })
             .unwrap(),
         ));
@@ -169,16 +169,22 @@ mod tests {
             author: Some("Example Author".to_owned()),
             summary: Some("Example Summary".to_owned()),
             description: Some("Example Description".to_owned()),
-            version: Some("0.0.1".to_owned()),
+            version: Some("0.1.0".to_owned()),
             item_type: ModType::Mod,
-            dependencies: Some(vec![(
-                Uuid::from_str("2b770fa6-749f-4aee-b49d-7bc4a0fe5dbe").unwrap(),
-                ModDependency {
-                    name: "Example Dependency".to_string(),
-                    summary: "Example Summary".to_string(),
-                    version: "0.0.1".to_string(),
-                },
-            )]),
+            dependencies: Some(vec![
+                (
+                    Uuid::from_str("2b770fa6-749f-4aee-b49d-7bc4a0fe5dbe").unwrap(),
+                    ModDependency {
+                        version: "0.1.0".to_string(),
+                    },
+                ),
+                (
+                    Uuid::from_str("929189e7-41e1-4f28-9419-e6376003ae32").unwrap(),
+                    ModDependency {
+                        version: "0.1.0".to_string(),
+                    },
+                ),
+            ]),
             tags: Some(vec!["test".to_owned(), "test2".to_owned()]),
         }
     }
