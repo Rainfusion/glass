@@ -6,3 +6,5 @@ pub mod json;
 pub mod msgpack;
 #[cfg(feature = "redis_backend")]
 pub mod redis;
+#[cfg(feature = "yaml_backend")]
+pub mod yaml;

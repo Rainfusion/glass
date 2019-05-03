@@ -233,6 +233,49 @@ mod tests {
         }
     }
 
+    // Bunch of tests to make sure YAML parses correctly for this object.
+    #[cfg(feature = "yaml_backend")]
+    mod yaml_tests {
+        use super::*;
+        use crate::backends::yaml;
+
+        #[test]
+        fn test_yaml_empty() {
+            let serialized = yaml::object_to_string((generic_uuid(), Mod::default())).unwrap();
+            let deserialized: (Uuid, Mod) = yaml::string_to_object(&serialized).unwrap();
+            assert_eq!((generic_uuid(), Mod::default()), deserialized);
+        }
+
+        #[test]
+        fn test_yaml_object() {
+            let serialized = yaml::object_to_string((generic_uuid(), generic_mod())).unwrap();
+            let deserialized: (Uuid, Mod) = yaml::string_to_object(&serialized).unwrap();
+            assert_eq!((generic_uuid(), generic_mod()), deserialized);
+        }
+
+        #[test]
+        fn test_yaml_empty_vec() {
+            let data_vec: Vec<(Uuid, Mod)> = vec![
+                (generic_uuid(), Mod::default()),
+                (generic_uuid(), Mod::default()),
+            ];
+            let serialized = yaml::objects_to_string(&data_vec).unwrap();
+            let deserialized: Vec<(Uuid, Mod)> = yaml::string_to_objects(&serialized).unwrap();
+            assert_eq!(data_vec, deserialized);
+        }
+
+        #[test]
+        fn test_yaml_object_vec() {
+            let data_vec: Vec<(Uuid, Mod)> = vec![
+                (generic_uuid(), generic_mod()),
+                (generic_uuid(), generic_mod()),
+            ];
+            let serialized = yaml::objects_to_string(&data_vec).unwrap();
+            let deserialized: Vec<(Uuid, Mod)> = yaml::string_to_objects(&serialized).unwrap();
+            assert_eq!(data_vec, deserialized);
+        }
+    }
+
     // Bunch of tests to make sure MessagePack converts properly for this object.
     #[cfg(feature = "msgpack_backend")]
     mod msgpack_tests {

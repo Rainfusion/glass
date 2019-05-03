@@ -11,6 +11,8 @@ default = ["redis", "serde_json", "rmp-serde"]
 redis_backend = ["redis"]
 # JSON Feature
 json_backend = ["serde_json"]
+# YAML Feature
+yaml_backend = ["serde_yaml"]
 # MsgPack Feature
 msgpack_backend = ["rmp-serde"]
 
@@ -20,6 +22,7 @@ uuid = { version = "0.7", features = ["serde", "v4"] }
 log = "0.4"
 
 serde_json = { version = "1.0", optional = true }
+serde_yaml = { version = "0.8", optional = true }
 rmp-serde = {version = "0.13", optional = true }
 redis = { version = "0.10", optional = true }
 
