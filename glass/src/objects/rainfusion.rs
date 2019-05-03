@@ -16,7 +16,6 @@ use uuid::Uuid;
 pub struct Mod {
     pub name: Option<String>,
     pub author: Option<String>,
-    pub img_url: Option<String>,
     pub summary: Option<String>,
     pub description: Option<String>,
     pub version: Option<String>,
@@ -83,16 +82,15 @@ impl From<Vec<(String, String)>> for Mod {
         Self {
             name: values.get(0).and_then(|x| Some(x.to_owned())),
             author: values.get(1).and_then(|x| Some(x.to_owned())),
-            img_url: values.get(2).and_then(|x| Some(x.to_owned())),
-            summary: values.get(3).and_then(|x| Some(x.to_owned())),
-            description: values.get(4).and_then(|x| Some(x.to_owned())),
-            version: values.get(5).and_then(|x| Some(x.to_owned())),
-            item_type: ModType::from(values[6].clone()),
-            dependencies: match json::string_to_objects(&values[7]) {
+            summary: values.get(2).and_then(|x| Some(x.to_owned())),
+            description: values.get(3).and_then(|x| Some(x.to_owned())),
+            version: values.get(4).and_then(|x| Some(x.to_owned())),
+            item_type: ModType::from(values[5].clone()),
+            dependencies: match json::string_to_objects(&values[6]) {
                 Ok(x) => Some(x),
                 Err(_) => None,
             },
-            tags: match serde_json::from_str(&values[8]) {
+            tags: match serde_json::from_str(&values[7]) {
                 Ok(x) => Some(x),
                 Err(_) => None,
             },
@@ -109,23 +107,19 @@ impl From<Mod> for Vec<(String, String)> {
         let collapse_string =
             |x: Option<String>| -> String { x.map_or("N/A".to_string(), |y| y.to_string()) };
 
-        output.push(("name".to_owned(), collapse_string(object.name.clone())));
-        output.push(("author".to_owned(), collapse_string(object.author.clone())));
-        output.push((
-            "img_url".to_owned(),
-            collapse_string(object.img_url.clone()),
-        ));
+        output.push(("name".to_owned(), collapse_string(object.name.to_owned())));
+        output.push(("author".to_owned(), collapse_string(object.author.to_owned())));
         output.push((
             "summary".to_owned(),
-            collapse_string(object.summary.clone()),
+            collapse_string(object.summary.to_owned()),
         ));
         output.push((
             "description".to_owned(),
-            collapse_string(object.description.clone()),
+            collapse_string(object.description.to_owned()),
         ));
         output.push((
             "version".to_owned(),
-            collapse_string(object.version.clone()),
+            collapse_string(object.version.to_owned()),
         ));
         output.push(("item_type".to_owned(), String::from(object.item_type)));
         output.push((
@@ -173,7 +167,6 @@ mod tests {
         Mod {
             name: Some("Example Mod".to_owned()),
             author: Some("Example Author".to_owned()),
-            img_url: Some("localhost".to_owned()),
             summary: Some("Example Summary".to_owned()),
             description: Some("Example Description".to_owned()),
             version: Some("0.0.1".to_owned()),
