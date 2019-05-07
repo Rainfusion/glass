@@ -264,7 +264,7 @@ where
         vector.push((uuid, object));
 
         if uuid == grab_last_object(connection, index)? {
-            vector.push((Uuid::nil(), vec![]))
+            vector.push((Uuid::nil(), vec![]));
         }
     }
 

@@ -76,21 +76,27 @@ impl From<Vec<(String, String)>> for Mod {
     fn from(field_map: Vec<(String, String)>) -> Self {
         let values: Vec<String> = field_map.iter().map(|x| x.clone().1).collect();
 
-        Self {
-            name: values.get(0).and_then(|x| Some(x.to_owned())),
-            author: values.get(1).and_then(|x| Some(x.to_owned())),
-            summary: values.get(2).and_then(|x| Some(x.to_owned())),
-            description: values.get(3).and_then(|x| Some(x.to_owned())),
-            version: values.get(4).and_then(|x| Some(x.to_owned())),
-            item_type: ModType::from(values[5].clone()),
-            dependencies: match json::string_to_objects(&values[6]) {
-                Ok(x) => Some(x),
-                Err(_) => None,
-            },
-            tags: match serde_json::from_str(&values[7]) {
-                Ok(x) => Some(x),
-                Err(_) => None,
-            },
+        if values.is_empty() {
+            Self {
+                ..Default::default()
+            }
+        } else {
+            Self {
+                name: values.get(0).and_then(|x| Some(x.to_owned())),
+                author: values.get(1).and_then(|x| Some(x.to_owned())),
+                summary: values.get(2).and_then(|x| Some(x.to_owned())),
+                description: values.get(3).and_then(|x| Some(x.to_owned())),
+                version: values.get(4).and_then(|x| Some(x.to_owned())),
+                item_type: ModType::from(values[5].clone()),
+                dependencies: match json::string_to_objects(&values[6]) {
+                    Ok(x) => Some(x),
+                    Err(_) => None,
+                },
+                tags: match serde_json::from_str(&values[7]) {
+                    Ok(x) => Some(x),
+                    Err(_) => None,
+                },
+            }
         }
     }
 }
