@@ -232,7 +232,9 @@ where
             map_value, value
         );
 
-        merged.push((map_value.to_string(), value.unwrap().to_owned()));
+        if !value.is_none() {
+            merged.push((map_value.to_string(), value.unwrap().to_owned()));
+        }
     }
 
     Ok(merged)
