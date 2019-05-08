@@ -192,7 +192,7 @@ where
     Ok(())
 }
 
-/// Function to edit a field in an object in a local Redis database.
+/// Function to retrieve a object in a local Redis database.
 pub fn retrieve_object_from_database<T>(
     connection: &Connection,
     index: &str,
