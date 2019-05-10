@@ -88,11 +88,11 @@ impl From<Vec<(String, String)>> for Mod {
                 description: values.get(3).and_then(|x| Some(x.to_owned())),
                 version: values.get(4).and_then(|x| Some(x.to_owned())),
                 item_type: ModType::from(values[5].clone()),
-                dependencies: match json::string_to_objects(&values[6]) {
+                dependencies: match json::string_to_objects(&values.get(6).map_or("", |x| x)) {
                     Ok(x) => Some(x),
                     Err(_) => None,
                 },
-                tags: match serde_json::from_str(&values[7]) {
+                tags: match serde_json::from_str(&values.get(7).map_or("", |x| x)) {
                     Ok(x) => Some(x),
                     Err(_) => None,
                 },
