@@ -279,13 +279,22 @@ pub fn current_object_count(connection: &Connection, index: &str) -> Result<i32,
 }
 
 /// Function to return the score of the object in the Redis database index.
-pub fn object_score(connection: &Connection, index: &str, uuid: Uuid) -> Result<i32, Box<Error>> {
+pub fn object_score(connection: &Connection, index: &str, uuid: Uuid) -> Result<f32, Box<Error>> {
     Ok(connection.zscore(format!("{}-index", index), uuid.to_simple().to_string())?)
 }
 
 /// Function to increase or decrease score of an object in the Redis database index.
-pub fn change_object_score(connection: &Connection, index: &str, increment: i32, uuid: Uuid) -> Result<(), Box<Error>> {
-    Ok(connection.zincr(format!("{}-index", index), increment, uuid.to_simple().to_string())?)
+pub fn change_object_score(
+    connection: &Connection,
+    index: &str,
+    increment: f32,
+    uuid: Uuid,
+) -> Result<(), Box<Error>> {
+    Ok(connection.zincr(
+        format!("{}-index", index),
+        increment,
+        uuid.to_simple().to_string(),
+    )?)
 }
 
 /// Function to return the first object in the Redis database index.
