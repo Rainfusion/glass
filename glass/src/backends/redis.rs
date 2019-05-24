@@ -292,8 +292,8 @@ pub fn change_object_score(
 ) -> Result<(), Box<Error>> {
     Ok(connection.zincr(
         format!("{}-index", index),
-        increment,
         uuid.to_simple().to_string(),
+        increment,
     )?)
 }
 
