@@ -273,6 +273,34 @@ where
     Ok(vector)
 }
 
+/// Function to request all the objects from a local Redis database.
+/// Returns the objects from the database with the key and object in a Vec.
+pub fn request_all_objects<T>(
+    connection: &Connection,
+    field_map: &[&'static str],
+    index: &str,
+) -> Result<Vec<(Uuid, FieldMap<T>)>, Box<Error>>
+where
+    T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
+{
+    let mut vector: Vec<(Uuid, FieldMap<T>)> = Vec::new();
+
+    let output: Vec<String> = connection.zrange(&format!("{}-index", index), 0, -1)?;
+
+    for value in output {
+        let uuid = Uuid::parse_str(&value)?;
+
+        let object = retrieve_object_from_database(connection, index, field_map, uuid)?;
+        vector.push((uuid, object));
+
+        if uuid == grab_last_object(connection, index)? {
+            vector.push((Uuid::nil(), vec![]));
+        }
+    }
+
+    Ok(vector)
+}
+
 /// Function to return the current object count in a index the local Redis database.
 pub fn current_object_count(connection: &Connection, index: &str) -> Result<i32, Box<Error>> {
     Ok(connection.zcard(format!("{}-index", index))?)
