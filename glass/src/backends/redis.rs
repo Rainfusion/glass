@@ -206,36 +206,33 @@ where
     let mut pipeline = redis::Pipeline::new();
 
     // Iterate through map to find fields that need to be retrieved and generate a command for them.
-    for item in field_map.iter() {
-        debug!("GET: Got: {} -> for {}. Generating command.", item, index);
+    field_map.into_iter().for_each(|i| {
+        debug!("GET: Got: {} -> for {}. Generating command.", i, index);
         pipeline.add_command(
             redis::cmd("HGET")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(*item),
+                .arg(*i),
         );
-    }
+    });
 
     // Finally send commands to database.
     let output: Vec<T> = pipeline.query(connection)?;
 
     // Merge the two vectors.
-    let mut merged: FieldMap<T> = Vec::new();
+    let merged: FieldMap<T> = (0..field_map.len())
+        .map(|i| {
+            debug!("GET COMBINE: Index: {}", i);
+            let map_value = field_map.get(i).map_or(String::from(""), |x| x.to_string());
+            let value = output.get(i).unwrap();
 
-    // Merge Field with Value
-    for i in 0..field_map.len() {
-        debug!("GET COMBINE: Index: {}", i);
-        let map_value = field_map.get(i).map_or("", |x| x);
-        let value = output.get(i);
+            debug!(
+                "GET COMBINE: Map Value: {} - Output Value: {:?}",
+                map_value, value
+            );
 
-        debug!(
-            "GET COMBINE: Map Value: {} - Output Value: {:?}",
-            map_value, value
-        );
-
-        if !value.is_none() {
-            merged.push((map_value.to_string(), value.unwrap().to_owned()));
-        }
-    }
+            (map_value, value.to_owned())
+        })
+        .collect();
 
     Ok(merged)
 }
@@ -251,24 +248,27 @@ pub fn request_group_of_objects<T>(
 where
     T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
 {
-    let mut vector: Vec<(Uuid, FieldMap<T>)> = Vec::new();
-
     let output: Vec<String> = connection.zrange(
         &format!("{}-index", index),
         8 * (amount - 1),
         (8 * amount) - 1,
     )?;
+    let last_object = grab_last_object(connection, index)?;
 
-    for value in output {
-        let uuid = Uuid::parse_str(&value)?;
+    let vector: Vec<(Uuid, FieldMap<T>)> = output
+        .into_iter()
+        .map(|x| {
+            let uuid = Uuid::parse_str(&x).unwrap();
+            let object: FieldMap<T> =
+                retrieve_object_from_database(connection, index, field_map, uuid).unwrap();
 
-        let object = retrieve_object_from_database(connection, index, field_map, uuid)?;
-        vector.push((uuid, object));
-
-        if uuid == grab_last_object(connection, index)? {
-            vector.push((Uuid::nil(), vec![]));
-        }
-    }
+            if uuid == last_object {
+                (Uuid::nil(), vec![])
+            } else {
+                (uuid, object)
+            }
+        })
+        .collect();
 
     Ok(vector)
 }
@@ -283,20 +283,23 @@ pub fn request_all_objects<T>(
 where
     T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
 {
-    let mut vector: Vec<(Uuid, FieldMap<T>)> = Vec::new();
-
     let output: Vec<String> = connection.zrange(&format!("{}-index", index), 0, -1)?;
+    let last_object = grab_last_object(connection, index)?;
 
-    for value in output {
-        let uuid = Uuid::parse_str(&value)?;
+    let vector: Vec<(Uuid, FieldMap<T>)> = output
+        .into_iter()
+        .map(|x| {
+            let uuid = Uuid::parse_str(&x).unwrap();
+            let object: FieldMap<T> =
+                retrieve_object_from_database(connection, index, field_map, uuid).unwrap();
 
-        let object = retrieve_object_from_database(connection, index, field_map, uuid)?;
-        vector.push((uuid, object));
-
-        if uuid == grab_last_object(connection, index)? {
-            vector.push((Uuid::nil(), vec![]));
-        }
-    }
+            if uuid == last_object {
+                (Uuid::nil(), vec![])
+            } else {
+                (uuid, object)
+            }
+        })
+        .collect();
 
     Ok(vector)
 }
