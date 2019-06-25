@@ -253,7 +253,6 @@ where
         8 * (amount - 1),
         (8 * amount) - 1,
     )?;
-    let last_object = grab_last_object(connection, index)?;
 
     let vector: Vec<(Uuid, FieldMap<T>)> = output
         .into_iter()
@@ -262,11 +261,7 @@ where
             let object: FieldMap<T> =
                 retrieve_object_from_database(connection, index, field_map, uuid).expect("Failed to retrieve object from the database.");
 
-            if uuid == last_object {
-                (Uuid::nil(), vec![])
-            } else {
-                (uuid, object)
-            }
+            (uuid, object)
         })
         .collect();
 
@@ -284,7 +279,6 @@ where
     T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
 {
     let output: Vec<String> = connection.zrange(&format!("{}-index", index), 0, -1)?;
-    let last_object = grab_last_object(connection, index)?;
 
     let vector: Vec<(Uuid, FieldMap<T>)> = output
         .into_iter()
@@ -293,11 +287,7 @@ where
             let object: FieldMap<T> =
                 retrieve_object_from_database(connection, index, field_map, uuid).expect("Failed to retrieve object from the database.");
 
-            if uuid == last_object {
-                (Uuid::nil(), vec![])
-            } else {
-                (uuid, object)
-            }
+            (uuid, object)
         })
         .collect();
 
