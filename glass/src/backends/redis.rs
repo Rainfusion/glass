@@ -223,7 +223,7 @@ where
         .map(|i| {
             debug!("GET COMBINE: Index: {}", i);
             let map_value = field_map.get(i).map_or(String::from(""), |x| x.to_string());
-            let value = output.get(i).unwrap();
+            let value = output.get(i).expect("Failed to get value from output vector on object.");
 
             debug!(
                 "GET COMBINE: Map Value: {} - Output Value: {:?}",
@@ -258,9 +258,9 @@ where
     let vector: Vec<(Uuid, FieldMap<T>)> = output
         .into_iter()
         .map(|x| {
-            let uuid = Uuid::parse_str(&x).unwrap();
+            let uuid = Uuid::parse_str(&x).expect("Failed to parse UUID from object.");
             let object: FieldMap<T> =
-                retrieve_object_from_database(connection, index, field_map, uuid).unwrap();
+                retrieve_object_from_database(connection, index, field_map, uuid).expect("Failed to retrieve object from the database.");
 
             if uuid == last_object {
                 (Uuid::nil(), vec![])
@@ -289,9 +289,9 @@ where
     let vector: Vec<(Uuid, FieldMap<T>)> = output
         .into_iter()
         .map(|x| {
-            let uuid = Uuid::parse_str(&x).unwrap();
+            let uuid = Uuid::parse_str(&x).expect("Failed to parse UUID from object.");
             let object: FieldMap<T> =
-                retrieve_object_from_database(connection, index, field_map, uuid).unwrap();
+                retrieve_object_from_database(connection, index, field_map, uuid).expect("Failed to retrieve object from the database.");
 
             if uuid == last_object {
                 (Uuid::nil(), vec![])
