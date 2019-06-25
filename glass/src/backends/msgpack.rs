@@ -4,7 +4,7 @@ use std::error::Error;
 use uuid::Uuid;
 
 /// Converts an object that implements Serialize into a vector of bytes.
-pub fn object_to_bytes<T>(object: (Uuid, T)) -> Result<Vec<u8>, Box<Error>>
+pub fn object_to_bytes<T>(object: (Uuid, T)) -> Result<Vec<u8>, Box<dyn Error>>
 where
     T: serde::ser::Serialize,
 {
@@ -12,7 +12,7 @@ where
 }
 
 /// Converts objects that implement Serialize into a vector of bytes.
-pub fn objects_to_bytes<T>(objects: &[(Uuid, T)]) -> Result<Vec<u8>, Box<Error>>
+pub fn objects_to_bytes<T>(objects: &[(Uuid, T)]) -> Result<Vec<u8>, Box<dyn Error>>
 where
     T: serde::ser::Serialize,
 {
@@ -20,7 +20,7 @@ where
 }
 
 /// Converts a vector of bytes into an object that implement Deserialize.
-pub fn bytes_to_object<'de, T>(bytes: &'de [u8]) -> Result<(Uuid, T), Box<Error>>
+pub fn bytes_to_object<'de, T>(bytes: &'de [u8]) -> Result<(Uuid, T), Box<dyn Error>>
 where
     T: serde::de::Deserialize<'de>,
 {
@@ -28,7 +28,7 @@ where
 }
 
 /// Converts a vector of bytes into objects that implement Deserialize.
-pub fn bytes_to_objects<'de, T>(bytes: &'de [u8]) -> Result<Vec<(Uuid, T)>, Box<Error>>
+pub fn bytes_to_objects<'de, T>(bytes: &'de [u8]) -> Result<Vec<(Uuid, T)>, Box<dyn Error>>
 where
     T: serde::de::Deserialize<'de>,
 {

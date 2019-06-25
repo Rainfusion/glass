@@ -4,7 +4,7 @@ use std::error::Error;
 use uuid::Uuid;
 
 /// Convert an object that implements Serialize to a String
-pub fn object_to_string<T>(object: (Uuid, T)) -> Result<String, Box<Error>>
+pub fn object_to_string<T>(object: (Uuid, T)) -> Result<String, Box<dyn Error>>
 where
     T: serde::ser::Serialize,
 {
@@ -12,7 +12,7 @@ where
 }
 
 /// Convert objects that implement Serialize to a String
-pub fn objects_to_string<T>(objects: &[(Uuid, T)]) -> Result<String, Box<Error>>
+pub fn objects_to_string<T>(objects: &[(Uuid, T)]) -> Result<String, Box<dyn Error>>
 where
     T: serde::ser::Serialize,
 {
@@ -20,7 +20,7 @@ where
 }
 
 /// Convert a JSON string into an object that implement Deserialize
-pub fn string_to_object<'de, T>(string: &'de str) -> Result<(Uuid, T), Box<Error>>
+pub fn string_to_object<'de, T>(string: &'de str) -> Result<(Uuid, T), Box<dyn Error>>
 where
     T: serde::de::Deserialize<'de>,
 {
@@ -28,7 +28,7 @@ where
 }
 
 /// Convert a JSON string into objects that implement Deserialize
-pub fn string_to_objects<'de, T>(string: &'de str) -> Result<Vec<(Uuid, T)>, Box<Error>>
+pub fn string_to_objects<'de, T>(string: &'de str) -> Result<Vec<(Uuid, T)>, Box<dyn Error>>
 where
     T: serde::de::Deserialize<'de>,
 {
