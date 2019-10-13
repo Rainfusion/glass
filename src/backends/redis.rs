@@ -3,14 +3,14 @@
 //! The configuration can be used to generate a connection to the database.
 use std::{error::Error, path::PathBuf, str::FromStr};
 
-use log::debug;
+use crate::objects::Sortable;
 use redis::{Client, Commands, Connection, ConnectionAddr, ConnectionInfo};
 use serde::Deserialize;
-use std::fmt::Debug;
 use uuid::Uuid;
 
 /// Custom Type Definitions
 type FieldMap<T> = Vec<(String, T)>;
+type RedisResult<T> = Result<Vec<(Uuid, FieldMap<T>)>, Box<dyn Error>>;
 
 /// Redis Connection Config
 /// Supports both TCP and Socket connections.
@@ -29,7 +29,9 @@ pub struct RedisConfig {
 }
 
 /// Function to parse a RedisConfig from a JSON file in a folder.
-pub fn parse_redis_config<T: AsRef<std::path::Path>>(path: T) -> Result<RedisConfig, Box<Error>> {
+pub fn parse_redis_config<T: AsRef<std::path::Path>>(
+    path: T,
+) -> Result<RedisConfig, Box<dyn Error>> {
     let file = std::fs::File::open(path)?;
     Ok(serde_json::from_reader(file)?)
 }
@@ -48,7 +50,7 @@ impl Default for RedisConfig {
 
 impl RedisConfig {
     /// Creates a connection to the Redis database using the RedisConfig
-    pub fn form_connection(self) -> Result<Connection, Box<Error>> {
+    pub fn form_connection(self) -> Result<Connection, Box<dyn Error>> {
         if self.database_socket.is_none() {
             // Handle TCP Connection
 
@@ -60,7 +62,7 @@ impl RedisConfig {
                     self.database_port.map_or(6379, |x| x),
                 )),
                 db: self.database_id,
-                passwd: self.database_password.clone().and_then(|x| Some(x)),
+                passwd: self.database_password.clone().and_then(Some),
             })?
             .get_connection()?)
         } else {
@@ -74,7 +76,7 @@ impl RedisConfig {
                         .as_str(),
                 )?)),
                 db: self.database_id,
-                passwd: self.database_password.clone().and_then(|x| Some(x)),
+                passwd: self.database_password.clone().and_then(Some),
             })?
             .get_connection()?)
         }
@@ -83,14 +85,13 @@ impl RedisConfig {
 
 /// Function to insert an object into a local Redis database.
 /// Returns the UUID of where the object is on the database.
-pub fn insert_object_into_database<T>(
-    connection: &Connection,
-    index: &str,
-    field_map: FieldMap<T>,
+pub fn insert_object_into_database<O>(
+    connection: &mut Connection,
+    object: O,
     uuid: Option<Uuid>,
-) -> Result<Uuid, Box<Error>>
+) -> Result<Uuid, Box<dyn Error>>
 where
-    T: std::fmt::Debug + redis::ToRedisArgs,
+    O: Sortable,
 {
     // Generate UUID or use provided one.
     let gen_key = match uuid {
@@ -98,28 +99,35 @@ where
         None => Uuid::new_v4(),
     };
 
+    // Get Object Variables
+    let field_map: FieldMap<O::DataType> = object.object_to_map();
+    let index = O::object_to_index();
+
     // Find next index in table.
-    let count: i32 = connection.zcard(format!("{}-index", index))?;
+    let count: i32 = connection.zcard(&format!("{}-index", index))?;
 
     // Generate a command pipeline.
     let mut pipeline = redis::Pipeline::new();
+
     // Add UUID to index for object.
     pipeline.add_command(
         redis::cmd("ZADD")
             .arg(&format!("{}-index", index))
             .arg(count + 1)
-            .arg(&gen_key.to_simple().to_string()),
+            .arg(&gen_key.to_simple().to_string())
+            .to_owned(),
     );
 
     // Iterate through map to find fields that need to be populated and generate a command for them.
-    for item in field_map {
+    field_map.into_iter().for_each(|item| {
         pipeline.add_command(
             redis::cmd("HSET")
                 .arg(&format!("{}:{}", index, &gen_key.to_simple().to_string()))
                 .arg(item.0)
-                .arg(item.1),
+                .arg(item.1)
+                .to_owned(),
         );
-    }
+    });
 
     // Finally send commands to database.
     pipeline.query(connection)?;
@@ -128,12 +136,18 @@ where
 }
 
 /// Function to remove an object from a local Redis database.
-pub fn remove_object_from_database(
-    connection: &Connection,
-    index: &str,
-    field_map: &[&'static str],
+pub fn remove_object_from_database<O>(
+    connection: &mut Connection,
+    object: O,
     uuid: Uuid,
-) -> Result<(), Box<Error>> {
+) -> Result<(), Box<dyn Error>>
+where
+    O: Sortable,
+{
+    // Get Object Variables
+    let field_map: FieldMap<O::DataType> = object.object_to_map();
+    let index = O::object_to_index();
+
     // Remove uuid in table.
     let _res: i32 = connection.zrem(format!("{}-index", index), uuid.to_simple().to_string())?;
 
@@ -142,14 +156,11 @@ pub fn remove_object_from_database(
 
     // Iterate through map to find fields that need to be removed and generate a command for them.
     for item in field_map {
-        debug!(
-            "DELETE: Got: {} -> for {}. Generating command.",
-            item, index
-        );
         pipeline.add_command(
             redis::cmd("HDEL")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(*item),
+                .arg(item)
+                .to_owned(),
         );
     }
 
@@ -160,31 +171,31 @@ pub fn remove_object_from_database(
 }
 
 /// Function to edit a field in an object in a local Redis database.
-pub fn edit_object_from_database<T>(
-    connection: &Connection,
-    index: &str,
-    field_map: FieldMap<T>,
+pub fn edit_object_from_database<O>(
+    connection: &mut Connection,
+    object: O,
     uuid: Uuid,
-) -> Result<(), Box<Error>>
+) -> Result<(), Box<dyn Error>>
 where
-    T: std::fmt::Debug + redis::ToRedisArgs,
+    O: Sortable,
 {
     // Generate a command pipeline.
     let mut pipeline = redis::Pipeline::new();
 
+    // Get Object Variables
+    let field_map: FieldMap<O::DataType> = object.object_to_map();
+    let index = O::object_to_index();
+
     // Iterate through map to find fields that need to be edited and generate a command for them.
-    for item in field_map {
-        debug!(
-            "EDIT: Got: {} - Value: {:?} -> for {}. Generating command.",
-            item.0, item.1, index
-        );
+    field_map.into_iter().for_each(|item| {
         pipeline.add_command(
             redis::cmd("HSET")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
                 .arg(item.0)
-                .arg(item.1),
+                .arg(item.1)
+                .to_owned(),
         );
-    }
+    });
 
     // Finally send commands to database.
     pipeline.query(connection)?;
@@ -193,44 +204,44 @@ where
 }
 
 /// Function to retrieve a object in a local Redis database.
-pub fn retrieve_object_from_database<T>(
-    connection: &Connection,
-    index: &str,
-    field_map: &[&'static str],
+pub fn retrieve_object_from_database<O>(
+    connection: &mut Connection,
+    object: O,
     uuid: Uuid,
-) -> Result<FieldMap<T>, Box<Error>>
+) -> Result<FieldMap<O::DataType>, Box<dyn Error>>
 where
-    T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
+    O: Sortable,
 {
     // Generate a command pipeline.
     let mut pipeline = redis::Pipeline::new();
 
+    // Get Object Variables
+    let field_map = object.object_to_map();
+    let index = O::object_to_index();
+
     // Iterate through map to find fields that need to be retrieved and generate a command for them.
-    field_map.into_iter().for_each(|i| {
-        debug!("GET: Got: {} -> for {}. Generating command.", i, index);
+    field_map.iter().for_each(|i| {
         pipeline.add_command(
             redis::cmd("HGET")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(*i),
+                .arg(i.0.to_owned())
+                .to_owned(),
         );
     });
 
     // Finally send commands to database.
-    let output: Vec<T> = pipeline.query(connection)?;
+    let output: Vec<O::DataType> = pipeline.query(connection)?;
 
     // Merge the two vectors.
-    let merged: FieldMap<T> = (0..field_map.len())
+    let merged: FieldMap<O::DataType> = (0..field_map.len())
         .map(|i| {
-            debug!("GET COMBINE: Index: {}", i);
-            let map_value = field_map.get(i).map_or(String::from(""), |x| x.to_string());
-            let value = output.get(i).expect("Failed to get value from output vector on object.");
+            let map_value = field_map.get(i).cloned().map_or(String::from(""), |x| x.0);
+            let value = output
+                .get(i)
+                .cloned()
+                .expect("Failed to get value from output vector on object.");
 
-            debug!(
-                "GET COMBINE: Map Value: {} - Output Value: {:?}",
-                map_value, value
-            );
-
-            (map_value, value.to_owned())
+            (map_value, value)
         })
         .collect();
 
@@ -239,87 +250,65 @@ where
 
 /// Function to request a range of objects from a local Redis database.
 /// Returns the objects from the database with the key and object in a Vec.
-pub fn request_group_of_objects<T>(
-    connection: &Connection,
-    field_map: &[&'static str],
-    index: &str,
+pub fn request_group_of_objects<O>(
+    connection: &mut Connection,
+    object: O,
     amount: isize,
-) -> Result<Vec<(Uuid, FieldMap<T>)>, Box<Error>>
+) -> RedisResult<O::DataType>
 where
-    T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
+    O: Sortable + Copy,
 {
     let output: Vec<String> = connection.zrange(
-        &format!("{}-index", index),
+        &format!("{}-index", O::object_to_index()),
         8 * (amount - 1),
         (8 * amount) - 1,
     )?;
 
-    let vector: Vec<(Uuid, FieldMap<T>)> = output
+    Ok(output
         .into_iter()
         .map(|x| {
             let uuid = Uuid::parse_str(&x).expect("Failed to parse UUID from object.");
-            let object: FieldMap<T> =
-                retrieve_object_from_database(connection, index, field_map, uuid).expect("Failed to retrieve object from the database.");
+            let object: FieldMap<O::DataType> =
+                retrieve_object_from_database(connection, object, uuid)
+                    .expect("Failed to retrieve object from the database.");
 
             (uuid, object)
         })
-        .collect();
-
-    Ok(vector)
+        .collect())
 }
 
 /// Function to request all the objects from a local Redis database.
 /// Returns the objects from the database with the key and object in a Vec.
-pub fn request_all_objects<T>(
-    connection: &Connection,
-    field_map: &[&'static str],
-    index: &str,
-) -> Result<Vec<(Uuid, FieldMap<T>)>, Box<Error>>
+pub fn request_all_objects<O>(connection: &mut Connection, object: O) -> RedisResult<O::DataType>
 where
-    T: redis::FromRedisValue + std::fmt::Display + Clone + Debug,
+    O: Sortable + Copy,
 {
-    let output: Vec<String> = connection.zrange(&format!("{}-index", index), 0, -1)?;
+    let output: Vec<String> =
+        connection.zrange(&format!("{}-index", O::object_to_index()), 0, -1)?;
 
-    let vector: Vec<(Uuid, FieldMap<T>)> = output
+    Ok(output
         .into_iter()
         .map(|x| {
             let uuid = Uuid::parse_str(&x).expect("Failed to parse UUID from object.");
-            let object: FieldMap<T> =
-                retrieve_object_from_database(connection, index, field_map, uuid).expect("Failed to retrieve object from the database.");
+            let object: FieldMap<O::DataType> =
+                retrieve_object_from_database(connection, object, uuid)
+                    .expect("Failed to retrieve object from the database.");
 
             (uuid, object)
         })
-        .collect();
-
-    Ok(vector)
+        .collect())
 }
 
 /// Function to return the current object count in a index the local Redis database.
-pub fn current_object_count(connection: &Connection, index: &str) -> Result<i32, Box<Error>> {
+pub fn current_object_count(
+    connection: &mut Connection,
+    index: &str,
+) -> Result<i32, Box<dyn Error>> {
     Ok(connection.zcard(format!("{}-index", index))?)
 }
 
-/// Function to return the score of the object in the Redis database index.
-pub fn object_score(connection: &Connection, index: &str, uuid: Uuid) -> Result<f32, Box<Error>> {
-    Ok(connection.zscore(format!("{}-index", index), uuid.to_simple().to_string())?)
-}
-
-/// Function to increase or decrease score of an object in the Redis database index.
-pub fn change_object_score(
-    connection: &Connection,
-    index: &str,
-    increment: f32,
-    uuid: Uuid,
-) -> Result<(), Box<Error>> {
-    Ok(connection.zincr(
-        format!("{}-index", index),
-        uuid.to_simple().to_string(),
-        increment,
-    )?)
-}
-
 /// Function to return the first object in the Redis database index.
-pub fn grab_first_object(connection: &Connection, index: &str) -> Result<Uuid, Box<Error>> {
+pub fn grab_first_object(connection: &mut Connection, index: &str) -> Result<Uuid, Box<dyn Error>> {
     let output: Vec<String> = connection.zrange(format!("{}-index", index), 0, 0)?;
     let final_output = match output.first() {
         Some(s) => Uuid::parse_str(s)?,
@@ -330,7 +319,7 @@ pub fn grab_first_object(connection: &Connection, index: &str) -> Result<Uuid, B
 }
 
 /// Function to return the last object in the Redis database index.
-pub fn grab_last_object(connection: &Connection, index: &str) -> Result<Uuid, Box<Error>> {
+pub fn grab_last_object(connection: &mut Connection, index: &str) -> Result<Uuid, Box<dyn Error>> {
     let output: Vec<String> = connection.zrange(format!("{}-index", index), -1, -1)?;
     let final_output = match output.first() {
         Some(s) => Uuid::parse_str(s)?,

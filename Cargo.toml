@@ -1,5 +1,24 @@
-[workspace]
-members = [
-    "glass",
-    "glass-derive"
-]
+[package]
+name = "glass"
+version = "0.6.0"
+authors = ["FrictionlessPortals <8077147+FrictionlessPortals@users.noreply.github.com>"]
+edition = "2018"
+
+[features]
+# Default set of features, includes full library.
+default = ["redis", "serde_json", "serde_yaml"]
+# Redis Feature
+redis_backend = ["redis"]
+# JSON Feature
+json_backend = ["serde_json"]
+# YAML Feature
+yaml_backend = ["serde_yaml"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "0.7", features = ["serde", "v4"] }
+log = "0.4"
+
+serde_json = { version = "1.0", optional = true }
+serde_yaml = { version = "0.8", optional = true }
+redis = { version = "0.12", optional = true }

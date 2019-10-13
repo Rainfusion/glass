@@ -20,7 +20,7 @@ where
 }
 
 /// Convert a YAML string into an object that implement Deserialize
-pub fn string_to_object<'a, T>(string: &'a str) -> Result<(Uuid, T), Box<dyn Error>>
+pub fn string_to_object<T>(string: &str) -> Result<(Uuid, T), Box<dyn Error>>
 where
     T: serde::de::DeserializeOwned,
 {
@@ -28,7 +28,7 @@ where
 }
 
 /// Convert a YAML string into objects that implement Deserialize
-pub fn string_to_objects<'a, T>(string: &'a str) -> Result<Vec<(Uuid, T)>, Box<dyn Error>>
+pub fn string_to_objects<T>(string: &str) -> Result<Vec<(Uuid, T)>, Box<dyn Error>>
 where
     T: serde::de::DeserializeOwned,
 {

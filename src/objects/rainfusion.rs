@@ -1,18 +1,17 @@
 //! The RoR1 Mod object for the Rainfusion website.
 #[cfg(feature = "json_backend")]
 use crate::backends::json;
-#[cfg(feature = "msgpack_backend")]
-use crate::backends::msgpack;
 #[cfg(feature = "redis_backend")]
 use crate::backends::redis;
 
-use glass_derive::*;
+use super::Sortable;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use std::fmt::Debug;
 use uuid::Uuid;
 
 /// The RoR1 Mod Object
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Indexable, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct Mod {
     pub name: Option<String>,
     pub author: Option<String>,
@@ -69,12 +68,31 @@ impl From<String> for ModType {
     }
 }
 
-/// Implementation of From to convert a field map into a Mod object.
-#[cfg(feature = "redis_backend")]
-#[cfg(feature = "json_backend")]
-impl From<Vec<(String, String)>> for Mod {
-    fn from(field_map: Vec<(String, String)>) -> Self {
-        let values: Vec<String> = field_map.iter().map(|x| x.clone().1).collect();
+/// Implementation of the Sortable trait.
+impl Sortable for Mod {
+    type DataType = String;
+
+    fn object_to_index() -> &'static str {
+        "mods"
+    }
+
+    #[cfg(feature = "redis_backend")]
+    #[cfg(feature = "json_backend")]
+    fn map_to_object(map: Vec<(String, Self::DataType)>) -> Self {
+        let values: Vec<String> = map.into_iter().map(|x| x.1).collect();
+        let convert_value = |n: usize| -> Option<String> { values.get(n).cloned() };
+        let collapse_string =
+            |x: Option<String>| -> String { x.map_or("".to_string(), |y| y.to_string()) };
+
+        let dependencies = match json::string_to_objects(&collapse_string(convert_value(6))) {
+            Ok(x) => Some(x),
+            Err(_) => None,
+        };
+
+        let tags = match serde_json::from_str(&collapse_string(convert_value(7))) {
+            Ok(x) => Some(x),
+            Err(_) => None,
+        };
 
         if values.is_empty() {
             Self {
@@ -82,66 +100,50 @@ impl From<Vec<(String, String)>> for Mod {
             }
         } else {
             Self {
-                name: values.get(0).and_then(|x| Some(x.to_owned())),
-                author: values.get(1).and_then(|x| Some(x.to_owned())),
-                summary: values.get(2).and_then(|x| Some(x.to_owned())),
-                description: values.get(3).and_then(|x| Some(x.to_owned())),
-                version: values.get(4).and_then(|x| Some(x.to_owned())),
-                item_type: ModType::from(values[5].clone()),
-                dependencies: match json::string_to_objects(&values.get(6).map_or("", |x| x)) {
-                    Ok(x) => Some(x),
-                    Err(_) => None,
-                },
-                tags: match serde_json::from_str(&values.get(7).map_or("", |x| x)) {
-                    Ok(x) => Some(x),
-                    Err(_) => None,
-                },
+                name: convert_value(0),
+                author: convert_value(1),
+                summary: convert_value(2),
+                description: convert_value(3),
+                version: convert_value(4),
+                item_type: ModType::from(collapse_string(convert_value(5))),
+                dependencies,
+                tags,
             }
         }
     }
-}
 
-/// Implementation of From to convert a Mod into a field map.
-#[cfg(feature = "redis_backend")]
-#[cfg(feature = "json_backend")]
-impl From<Mod> for Vec<(String, String)> {
-    fn from(object: Mod) -> Vec<(String, String)> {
-        let mut output: Vec<(String, String)> = Vec::new();
-        let collapse_string =
-            |x: Option<String>| -> String { x.map_or("N/A".to_string(), |y| y.to_string()) };
+    #[cfg(feature = "redis_backend")]
+    #[cfg(feature = "json_backend")]
+    fn object_to_map(&self) -> Vec<(String, Self::DataType)> {
+        let collapse_string = |x: &Option<String>| -> String {
+            x.as_ref().map_or("N/A".to_string(), |y| y.to_string())
+        };
 
-        output.push(("name".to_owned(), collapse_string(object.name.to_owned())));
-        output.push((
-            "author".to_owned(),
-            collapse_string(object.author.to_owned()),
-        ));
-        output.push((
-            "summary".to_owned(),
-            collapse_string(object.summary.to_owned()),
-        ));
-        output.push((
-            "description".to_owned(),
-            collapse_string(object.description.to_owned()),
-        ));
-        output.push((
-            "version".to_owned(),
-            collapse_string(object.version.to_owned()),
-        ));
-        output.push(("item_type".to_owned(), String::from(object.item_type)));
-        output.push((
-            "dependencies".to_owned(),
-            json::objects_to_string(match object.dependencies {
-                None => &[],
-                Some(ref x) => x,
-            })
-            .unwrap(),
-        ));
-        output.push((
-            "tags".to_owned(),
-            serde_json::to_string(&object.tags).unwrap(),
-        ));
+        let dependencies = match self.dependencies {
+            None => &[],
+            Some(ref x) => x.as_slice(),
+        };
 
-        output
+        let dependencies_string = match json::objects_to_string(dependencies) {
+            Ok(x) => x,
+            Err(_) => "".into(),
+        };
+
+        let tags = match serde_json::to_string(&self.tags) {
+            Ok(x) => x,
+            Err(_) => "".into(),
+        };
+
+        vec![
+            ("name".into(), collapse_string(&self.name)),
+            ("author".into(), collapse_string(&self.author)),
+            ("summary".into(), collapse_string(&self.summary)),
+            ("description".into(), collapse_string(&self.description)),
+            ("version".into(), collapse_string(&self.version)),
+            ("item_type".into(), String::from(self.item_type.clone())),
+            ("dependencies".into(), dependencies_string),
+            ("tags".into(), tags),
+        ]
     }
 }
 
@@ -281,58 +283,17 @@ mod tests {
         }
     }
 
-    // Bunch of tests to make sure MessagePack converts properly for this object.
-    #[cfg(feature = "msgpack_backend")]
-    mod msgpack_tests {
-        use super::*;
-        use crate::backends::msgpack;
-
-        #[test]
-        fn test_msgpack_empty() {
-            let serialized = msgpack::object_to_bytes((generic_uuid(), Mod::default())).unwrap();
-            let deserialized: (Uuid, Mod) = msgpack::bytes_to_object(&serialized).unwrap();
-            assert_eq!((generic_uuid(), Mod::default()), deserialized);
-        }
-
-        #[test]
-        fn test_msgpack_object() {
-            let serialized = msgpack::object_to_bytes((generic_uuid(), generic_mod())).unwrap();
-            let deserialized: (Uuid, Mod) = msgpack::bytes_to_object(&serialized).unwrap();
-            assert_eq!((generic_uuid(), generic_mod()), deserialized);
-        }
-
-        #[test]
-        fn test_msgpack_empty_vec() {
-            let data_vec: Vec<(Uuid, Mod)> = vec![
-                (generic_uuid(), Mod::default()),
-                (generic_uuid(), Mod::default()),
-            ];
-            let serialized = msgpack::objects_to_bytes(&data_vec).unwrap();
-            let deserialized: Vec<(Uuid, Mod)> = msgpack::bytes_to_objects(&serialized).unwrap();
-            assert_eq!(data_vec, deserialized);
-        }
-
-        #[test]
-        fn test_msgpack_object_vec() {
-            let data_vec: Vec<(Uuid, Mod)> = vec![
-                (generic_uuid(), generic_mod()),
-                (generic_uuid(), generic_mod()),
-            ];
-            let serialized = msgpack::objects_to_bytes(&data_vec).unwrap();
-            let deserialized: Vec<(Uuid, Mod)> = msgpack::bytes_to_objects(&serialized).unwrap();
-            assert_eq!(data_vec, deserialized);
-        }
-    }
-
     // Bunch of tests to make sure Redis performs actions correctly for this object.
     #[cfg(feature = "redis_backend")]
     mod redis_tests {
         use super::*;
         use crate::backends::redis;
+        use crate::objects::Sortable;
+        use std::fmt::Debug;
 
         #[test]
         fn test_redis_object() {
-            let connection = redis::RedisConfig {
+            let mut connection = redis::RedisConfig {
                 database_ip: Some("127.0.0.1".to_owned()),
                 database_port: Some(6379),
                 database_socket: None,
@@ -344,9 +305,8 @@ mod tests {
 
             // First Insert Object into database.
             let result: Uuid = redis::insert_object_into_database(
-                &connection,
-                "mods",
-                From::from(generic_mod()),
+                &mut connection,
+                generic_mod(),
                 Some(generic_uuid()),
             )
             .unwrap();
@@ -354,19 +314,17 @@ mod tests {
 
             // Check if Object can be retrieved successfully.
             let second_result: Vec<(String, String)> = redis::retrieve_object_from_database(
-                &connection,
-                "mods",
-                Mod::fields(),
+                &mut connection,
+                generic_mod(),
                 generic_uuid(),
             )
             .unwrap();
 
-            let object = Mod::from(second_result);
+            let object = Mod::map_to_object(second_result);
             assert_eq!(object, generic_mod());
 
             // Delete Object from database.
-            redis::remove_object_from_database(&connection, "mods", Mod::fields(), generic_uuid())
-                .unwrap();
+            redis::remove_object_from_database(&mut connection, object, generic_uuid()).unwrap();
         }
     }
 }
