@@ -5,13 +5,14 @@ use crate::backends::json;
 use crate::backends::redis;
 
 use super::Sortable;
+use glass_derive::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::fmt::Debug;
 use uuid::Uuid;
 
 /// The RoR1 Mod Object
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Indexable, PartialEq, Default, Clone)]
 pub struct Mod {
     pub name: Option<String>,
     pub author: Option<String>,
