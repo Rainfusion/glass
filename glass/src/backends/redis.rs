@@ -138,14 +138,13 @@ where
 /// Function to remove an object from a local Redis database.
 pub fn remove_object_from_database<O>(
     connection: &mut Connection,
-    object: O,
+    map: &[&'static str],
     uuid: Uuid,
 ) -> Result<(), Box<dyn Error>>
 where
     O: Sortable,
 {
     // Get Object Variables
-    let field_map: FieldMap<O::DataType> = object.object_to_map();
     let index = O::object_to_index();
 
     // Remove uuid in table.
@@ -155,14 +154,14 @@ where
     let mut pipeline = redis::Pipeline::new();
 
     // Iterate through map to find fields that need to be removed and generate a command for them.
-    for item in field_map {
+    map.into_iter().for_each(|item| {
         pipeline.add_command(
             redis::cmd("HDEL")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(item)
+                .arg(item.to_owned())
                 .to_owned(),
         );
-    }
+    });
 
     // Finally send commands to database.
     pipeline.query(connection)?;
@@ -206,7 +205,7 @@ where
 /// Function to retrieve a object in a local Redis database.
 pub fn retrieve_object_from_database<O>(
     connection: &mut Connection,
-    object: O,
+    map: &[&'static str],
     uuid: Uuid,
 ) -> Result<FieldMap<O::DataType>, Box<dyn Error>>
 where
@@ -216,15 +215,14 @@ where
     let mut pipeline = redis::Pipeline::new();
 
     // Get Object Variables
-    let field_map = object.object_to_map();
     let index = O::object_to_index();
 
     // Iterate through map to find fields that need to be retrieved and generate a command for them.
-    field_map.iter().for_each(|i| {
+    map.iter().for_each(|i| {
         pipeline.add_command(
             redis::cmd("HGET")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
-                .arg(i.0.to_owned())
+                .arg(i.to_owned())
                 .to_owned(),
         );
     });
@@ -233,9 +231,12 @@ where
     let output: Vec<O::DataType> = pipeline.query(connection)?;
 
     // Merge the two vectors.
-    let merged: FieldMap<O::DataType> = (0..field_map.len())
+    let merged: FieldMap<O::DataType> = (0..map.len())
         .map(|i| {
-            let map_value = field_map.get(i).cloned().map_or(String::from(""), |x| x.0);
+            let map_value = map
+                .get(i)
+                .cloned()
+                .map_or(String::from(""), |x| x.to_string());
             let value = output
                 .get(i)
                 .cloned()
@@ -252,7 +253,7 @@ where
 /// Returns the objects from the database with the key and object in a Vec.
 pub fn request_group_of_objects<O>(
     connection: &mut Connection,
-    object: O,
+    map: &[&'static str],
     amount: isize,
 ) -> RedisResult<O::DataType>
 where
@@ -269,7 +270,7 @@ where
         .map(|x| {
             let uuid = Uuid::parse_str(&x).expect("Failed to parse UUID from object.");
             let object: FieldMap<O::DataType> =
-                retrieve_object_from_database(connection, object, uuid)
+                retrieve_object_from_database::<O>(connection, map, uuid)
                     .expect("Failed to retrieve object from the database.");
 
             (uuid, object)
@@ -279,7 +280,10 @@ where
 
 /// Function to request all the objects from a local Redis database.
 /// Returns the objects from the database with the key and object in a Vec.
-pub fn request_all_objects<O>(connection: &mut Connection, object: O) -> RedisResult<O::DataType>
+pub fn request_all_objects<O>(
+    connection: &mut Connection,
+    map: &[&'static str],
+) -> RedisResult<O::DataType>
 where
     O: Sortable + Copy,
 {
@@ -291,7 +295,7 @@ where
         .map(|x| {
             let uuid = Uuid::parse_str(&x).expect("Failed to parse UUID from object.");
             let object: FieldMap<O::DataType> =
-                retrieve_object_from_database(connection, object, uuid)
+                retrieve_object_from_database::<O>(connection, map, uuid)
                     .expect("Failed to retrieve object from the database.");
 
             (uuid, object)
