@@ -5,14 +5,13 @@ use crate::backends::json;
 use crate::backends::redis;
 
 use super::Sortable;
-use glass_derive::*;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 use uuid::Uuid;
 
 /// The RoR1 Mod Object
-#[derive(Serialize, Deserialize, Debug, Indexable, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct Mod {
     pub name: Option<String>,
     pub author: Option<String>,
@@ -79,36 +78,35 @@ impl Sortable for Mod {
 
     #[cfg(feature = "redis_backend")]
     #[cfg(feature = "json_backend")]
-    fn map_to_object(map: Vec<(String, Self::DataType)>) -> Self {
-        let values: Vec<String> = map.into_iter().map(|x| x.1).collect();
-        let convert_value = |n: usize| -> Option<String> { values.get(n).cloned() };
+    fn map_to_object(map: HashMap<String, Self::DataType>) -> Self {
+        let fetch_value = |key: &str| -> Option<String> { map.get(key).cloned() };
         let collapse_string =
             |x: Option<String>| -> String { x.map_or("".to_string(), |y| y.to_string()) };
 
-        let dependencies = match json::string_to_objects(&collapse_string(convert_value(6))) {
-            Ok(x) => Some(x),
-            Err(_) => None,
-        };
-
-        let tags = match serde_json::from_str(&collapse_string(convert_value(7))) {
-            Ok(x) => Some(x),
-            Err(_) => None,
-        };
-
-        if values.is_empty() {
+        if map.is_empty() {
             Self {
                 ..Default::default()
             }
         } else {
             Self {
-                name: convert_value(0),
-                author: convert_value(1),
-                summary: convert_value(2),
-                description: convert_value(3),
-                version: convert_value(4),
-                item_type: ModType::from(collapse_string(convert_value(5))),
-                dependencies,
-                tags,
+                name: fetch_value("name"),
+                author: fetch_value("author"),
+                summary: fetch_value("summary"),
+                description: fetch_value("description"),
+                version: fetch_value("version"),
+                item_type: ModType::from(collapse_string(fetch_value("item_type"))),
+                dependencies: {
+                    match json::string_to_objects(&collapse_string(fetch_value("dependencies"))) {
+                        Ok(x) => Some(x),
+                        Err(_) => None,
+                    }
+                },
+                tags: {
+                    match serde_json::from_str(&collapse_string(fetch_value("tags"))) {
+                        Ok(x) => Some(x),
+                        Err(_) => None,
+                    }
+                },
             }
         }
     }
@@ -290,6 +288,7 @@ mod tests {
         use super::*;
         use crate::backends::redis;
         use crate::objects::Sortable;
+        use std::collections::HashMap;
         use std::fmt::Debug;
 
         #[test]
@@ -314,18 +313,15 @@ mod tests {
             assert_eq!(result, generic_uuid());
 
             // Check if Object can be retrieved successfully.
-            let second_result: Vec<(String, String)> = redis::retrieve_object_from_database(
-                &mut connection,
-                generic_mod(),
-                generic_uuid(),
-            )
-            .unwrap();
+            let second_result: HashMap<String, String> =
+                redis::retrieve_object_from_database::<Mod>(&mut connection, generic_uuid())
+                    .unwrap();
 
             let object = Mod::map_to_object(second_result);
             assert_eq!(object, generic_mod());
 
             // Delete Object from database.
-            redis::remove_object_from_database(&mut connection, object, generic_uuid()).unwrap();
+            redis::remove_object_from_database::<Mod>(&mut connection, generic_uuid()).unwrap();
         }
     }
 }
