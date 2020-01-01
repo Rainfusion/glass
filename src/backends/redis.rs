@@ -1,11 +1,11 @@
 //! Redis Functions and Config
 //! These functions can be used to allow an object to perform Redis database actions.
 //! The configuration can be used to generate a connection to the database.
-use std::{collections::HashMap, error::Error, path::PathBuf, str::FromStr};
 
 use crate::objects::Sortable;
 use redis::{Client, Commands, Connection, ConnectionAddr, ConnectionInfo};
 use serde::Deserialize;
+use std::{collections::HashMap, error::Error, path::PathBuf, str::FromStr};
 use uuid::Uuid;
 
 /// Custom Type Definitions
@@ -170,7 +170,7 @@ where
 /// Function to edit a field in an object in a local Redis database.
 pub fn edit_object_from_database<O>(
     connection: &mut Connection,
-    object: O,
+    changes: Vec<(String, O::DataType)>,
     uuid: Uuid,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -180,11 +180,10 @@ where
     let mut pipeline = redis::Pipeline::new();
 
     // Get Object Variables
-    let field_map: Vec<(String, O::DataType)> = object.object_to_map();
     let index = O::object_to_index();
 
     // Iterate through map to find fields that need to be edited and generate a command for them.
-    field_map.into_iter().for_each(|item| {
+    changes.into_iter().for_each(|item| {
         pipeline.add_command(
             redis::cmd("HSET")
                 .arg(&format!("{}:{}", index, &uuid.to_simple().to_string()))
